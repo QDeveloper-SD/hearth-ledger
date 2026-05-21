@@ -171,4 +171,4 @@ Things deferred past v1 and likely candidates for v1.1:
 
 ## License
 
-TBD — add your preferred license here before publishing.
+MIT License
