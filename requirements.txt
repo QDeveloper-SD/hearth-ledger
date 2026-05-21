@@ -1,0 +1,31 @@
+# Hearth Ledger — Python backend dependencies
+# Target: Python 3.11+
+
+# --- Web framework ---
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+
+# --- Data validation & settings ---
+pydantic==2.9.2
+pydantic-settings==2.6.1
+
+# --- Storage / concurrency ---
+filelock==3.16.1            # cross-process lock on the JSON document
+
+# --- HTTP client for Public.com integration ---
+httpx==0.27.2
+
+# --- Auth ---
+argon2-cffi==23.1.0         # password hashing
+itsdangerous==2.2.0         # signed session cookies
+
+# --- IDs ---
+python-ulid==3.0.0          # lexicographically sortable IDs for ledger entries
+
+# --- PDF export (optional, but listed for MVP) ---
+reportlab==4.2.5
+
+# --- Dev / test ---
+pytest==8.3.3
+pytest-asyncio==0.24.0
+pytest-httpx==0.32.0        # for testing the Public.com client without network
