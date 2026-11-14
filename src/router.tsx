@@ -1,5 +1,6 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { QueryClient, useQuery } from "@tanstack/react-query";
+import { ApiError, logout, setUnauthorizedHandler } from "@/lib/api";
 import {
   createRouter,
   createRootRoute,
@@ -8,6 +9,8 @@ import {
   Link,
   useRouterState,
   Navigate,
+  lazyRouteComponent,
+  redirect,
 } from "@tanstack/react-router";
 import { getSettings } from "@/lib/api";
 import {
@@ -23,16 +26,25 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Login from "./routes/index";
-import Dashboard from "./routes/app.dashboard";
-import Ledger from "./routes/app.ledger";
-import Portfolio from "./routes/app.portfolio";
-import Debt from "./routes/app.debt";
-import Income from "./routes/app.income";
-import Risk from "./routes/app.risk";
-import Planning from "./routes/app.planning";
-import SettingsPage from "./routes/app.settings";
+const Dashboard = lazyRouteComponent(() => import("./routes/app.dashboard"));
+const Ledger = lazyRouteComponent(() => import("./routes/app.ledger"));
+const Portfolio = lazyRouteComponent(() => import("./routes/app.portfolio"));
+const Debt = lazyRouteComponent(() => import("./routes/app.debt"));
+const Income = lazyRouteComponent(() => import("./routes/app.income"));
+const Risk = lazyRouteComponent(() => import("./routes/app.risk"));
+const Planning = lazyRouteComponent(() => import("./routes/app.planning"));
+const SettingsPage = lazyRouteComponent(() => import("./routes/app.settings"));
 
-export const queryClient = new QueryClient();
+export const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      // Auth and "not found" failures won't fix themselves; only retry transient errors.
+      retry: (count, err) =>
+        !(err instanceof ApiError && err.status >= 400 && err.status < 500) && count < 2,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
 
 const nav = [
   { to: "/app/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -51,8 +63,13 @@ function AppShell() {
   useEffect(() => {
     document.documentElement.classList.toggle("dark", settings?.theme === "dark");
   }, [settings?.theme]);
+  // The content pane (not the window) scrolls, so reset it when the page changes.
+  const mainRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    mainRef.current?.scrollTo({ top: 0 });
+  }, [pathname]);
   return (
-    <div className="min-h-screen flex bg-muted/30">
+    <div className="h-screen flex overflow-hidden bg-muted/30">
       <aside className="w-56 shrink-0 bg-background border-r border-border flex flex-col">
         <div className="h-16 flex items-center gap-2 px-4 border-b border-border">
           <div className="h-8 w-8 rounded-lg bg-primary text-primary-foreground grid place-items-center">
@@ -81,10 +98,21 @@ function AppShell() {
           })}
         </nav>
         <div className="p-3 text-xs text-muted-foreground border-t border-border">
-          <Link to="/" className="hover:text-foreground">Sign out</Link>
+          <button
+            type="button"
+            className="hover:text-foreground"
+            onClick={async () => {
+              await logout().catch(() => undefined);
+              queryClient.clear();
+              router.navigate({ to: "/" });
+            }}
+          >
+            Sign out
+          </button>
         </div>
       </aside>
-      <main className="flex-1 min-w-0 p-8 overflow-x-hidden">
+      {/* Only the content area scrolls; the sidebar stays put. */}
+      <main ref={mainRef} className="flex-1 min-w-0 p-8 overflow-x-hidden overflow-y-auto">
         <Outlet />
       </main>
     </div>
@@ -114,7 +142,20 @@ const rootRoute = createRootRoute({ component: Outlet, notFoundComponent: NotFou
 
 const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: "/", component: Login });
 
-const appRoute = createRoute({ getParentRoute: () => rootRoute, path: "/app", component: AppShell });
+const appRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/app",
+  component: AppShell,
+  // Session guard: never render app pages without a valid session.
+  beforeLoad: async () => {
+    try {
+      await queryClient.ensureQueryData({ queryKey: ["settings"], queryFn: getSettings });
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) throw redirect({ to: "/" });
+      // Other failures (server down, etc.) are shown by the pages themselves.
+    }
+  },
+});
 const appIndexRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/",
@@ -145,6 +186,12 @@ const routeTree = rootRoute.addChildren([
 ]);
 
 export const router = createRouter({ routeTree, scrollRestoration: true });
+
+// Session expired mid-use: drop cached data and go back to the login screen.
+setUnauthorizedHandler(() => {
+  queryClient.clear();
+  if (router.state.location.pathname !== "/") router.navigate({ to: "/" });
+});
 
 declare module "@tanstack/react-router" {
   interface Register {

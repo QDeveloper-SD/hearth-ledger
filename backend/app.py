@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+import os
+import sys
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -10,11 +12,26 @@ from fastapi.staticfiles import StaticFiles
 from itsdangerous import URLSafeTimedSerializer
 
 from backend.config import settings as _cfg
-from backend.routers import auth, dashboard, debt, export, income, ledger, planning, portfolio, risk
+from backend.routers import auth, dashboard, debt, export, imports, income, ledger, planning, portfolio, risk
 from backend.routers import settings as settings_router
 from backend.storage.json_store import JsonStore
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_dist() -> Path:
+    """Locate the built SPA: HEARTH_DIST_DIR, frozen bundle, or <repo>/dist."""
+    env = os.environ.get("HEARTH_DIST_DIR")
+    if env:
+        return Path(env)
+    if getattr(sys, "frozen", False):
+        base = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
+        for cand in (base / "dist", Path(sys.executable).parent / "dist",
+                     Path(sys.executable).parent.parent / "dist"):
+            if cand.is_dir():
+                return cand
+        return base / "dist"
+    return Path(__file__).resolve().parent.parent / "dist"
 
 
 def create_app(data_dir: Path | None = None) -> FastAPI:
@@ -46,11 +63,16 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
         planning.router,
         settings_router.router,
         export.router,
+        imports.router,
     ]:
         app.include_router(router)
 
-    dist = Path("dist")
-    if dist.is_dir():
+    @app.get("/api/health", include_in_schema=False)
+    async def health() -> dict[str, bool]:
+        return {"ok": True}
+
+    dist = _resolve_dist()
+    if (dist / "assets").is_dir():
         app.mount("/assets", StaticFiles(directory=str(dist / "assets")), name="assets")
 
         @app.get("/{full_path:path}", include_in_schema=False)

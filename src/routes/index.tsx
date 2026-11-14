@@ -12,7 +12,7 @@ export default function Login() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [isFirstRun, setIsFirstRun] = useState(false);
+  const isFirstRun = false;
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -21,10 +21,7 @@ export default function Login() {
     setLoading(true);
     try {
       const res = await login(username, password);
-      if (res.error === "first_run") {
-        setIsFirstRun(true);
-        setError("No account found. Create your family password below.");
-      } else if (res.error) {
+      if (res.error) {
         setError(res.error);
       } else {
         navigate({ to: "/app/dashboard" });

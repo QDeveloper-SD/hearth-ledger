@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Minus, Pencil, FileBarChart } from "lucide-react";
+import { Plus, Minus, Pencil, FileBarChart, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ImportDialog } from "@/components/finance/ImportDialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { PageHeader, Panel, Money } from "@/components/finance/primitives";
+import { PageHeader, Panel, Money, ErrorState } from "@/components/finance/primitives";
 import { Skeleton } from "@/components/ui/skeleton";
 import { listLedger, createLedger, updateLedger, deleteLedger, type LedgerEntry } from "@/lib/api";
 
@@ -25,9 +26,10 @@ function EntryForm({ value, onChange }: { value: FormState; onChange: (v: FormSt
 
 export default function Ledger() {
   const qc = useQueryClient();
-  const { data: entries, isLoading, error } = useQuery({ queryKey: ["ledger"], queryFn: listLedger });
+  const { data: entries, isLoading, error, refetch } = useQuery({ queryKey: ["ledger"], queryFn: listLedger });
   const [selected, setSelected] = useState<LedgerEntry | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [form, setForm] = useState<FormState>(empty);
 
@@ -57,6 +59,7 @@ export default function Ledger() {
       <div className="flex flex-wrap gap-2">
         <Button onClick={openAdd}><Plus className="h-4 w-4" /> Add</Button>
         <Button variant="outline" disabled={!selected} onClick={() => selected && remove.mutate(selected.id)}><Minus className="h-4 w-4" /> Remove</Button>
+        <Button variant="outline" onClick={() => setImportOpen(true)}><Upload className="h-4 w-4" /> Import</Button>
         <Button variant="outline" disabled={!selected} onClick={openEdit}><Pencil className="h-4 w-4" /> Edit</Button>
         <Button variant="outline"><FileBarChart className="h-4 w-4" /> View Summary</Button>
       </div>
@@ -66,8 +69,13 @@ export default function Ledger() {
 
       <Panel title="Ledger History">
         {isLoading && <Skeleton className="h-48 w-full" />}
-        {error && <p className="text-sm text-loss">Failed to load ledger.</p>}
-        {entries && (
+        {error && <ErrorState error={error} onRetry={() => refetch()} label="Failed to load ledger." />}
+        {entries && entries.length === 0 && (
+          <div className="py-12 text-center text-sm text-muted-foreground">
+            No transactions yet. Click <span className="font-medium">Add</span> to record your first entry.
+          </div>
+        )}
+        {entries && entries.length > 0 && (
           <div className="max-h-[560px] overflow-y-auto">
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-background">
@@ -128,6 +136,7 @@ export default function Ledger() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <ImportDialog kind="ledger" open={importOpen} onOpenChange={setImportOpen} />
     </div>
   );
 }

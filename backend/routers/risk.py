@@ -7,6 +7,8 @@ from pydantic import BaseModel
 
 from backend.routers.deps import SessionUser, Storedep
 from backend.services.metrics import (
+    asset_slices,
+    asset_values,
     current_ratio,
     debt_to_income,
     emergency_fund_months,
@@ -24,23 +26,7 @@ class InsurancePatch(BaseModel):
 async def get_risk(store: Storedep, _user: SessionUser) -> dict:
     doc = store.read()
 
-    portfolio = doc.get("portfolio", {})
-    public_cache = portfolio.get("public_cache", {})
-    manual_holdings = portfolio.get("manual_holdings", [])
-    public_holdings = public_cache.get("holdings", [])
-
-    if public_holdings:
-        exposure = [
-            {"name": h.get("symbol", ""), "value": h.get("current_value") or h.get("cost_basis_total") or 0.0}
-            for h in public_holdings
-        ]
-    elif manual_holdings:
-        exposure = [
-            {"name": h.get("symbol", ""), "value": h.get("cost_basis", 0.0)}
-            for h in manual_holdings
-        ]
-    else:
-        exposure = []
+    exposure = asset_slices(asset_values(doc))
 
     insurance = [
         {"name": p.get("name", p["name"]), "covered": p.get("covered", False)}
@@ -69,9 +55,10 @@ async def get_risk(store: Storedep, _user: SessionUser) -> dict:
     return {
         "data": {
             "net_worth": net_worth(doc),
-            "dti": dti if dti is not None else 0.0,
-            "emergency_months": em if em is not None else 0.0,
-            "current_ratio": cr if cr is not None else 0.0,
+            # null = not enough data to compute (the UI shows a dash)
+            "dti": dti,
+            "emergency_months": em,
+            "current_ratio": cr,
             "exposure": exposure,
             "insurance": insurance,
             "spend_series": spend_series,

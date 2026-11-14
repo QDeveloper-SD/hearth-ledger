@@ -59,3 +59,51 @@ export const CHART_COLORS = [
   "oklch(0.55 0.15 295)",
   "oklch(0.7 0.1 200)",
 ];
+
+export function EmptyState({
+  title = "No data yet",
+  hint,
+  height = 200,
+  action,
+}: {
+  title?: string;
+  hint?: string;
+  height?: number;
+  action?: ReactNode;
+}) {
+  return (
+    <div
+      className="flex flex-col items-center justify-center text-center gap-1 rounded-md border border-dashed border-border text-muted-foreground"
+      style={{ minHeight: height }}
+    >
+      <p className="text-sm font-medium">{title}</p>
+      {hint && <p className="text-xs">{hint}</p>}
+      {action && <div className="mt-2 text-xs">{action}</div>}
+    </div>
+  );
+}
+
+export function ErrorState({
+  error,
+  onRetry,
+  label = "Failed to load data.",
+}: {
+  error?: unknown;
+  onRetry?: () => void;
+  label?: string;
+}) {
+  const msg = error instanceof Error ? error.message : undefined;
+  return (
+    <div className="flex flex-wrap items-center gap-3 rounded-md border border-border p-4 text-sm">
+      <span className="text-loss">
+        {label}
+        {msg ? ` ${msg}` : ""}
+      </span>
+      {onRetry && (
+        <button type="button" onClick={onRetry} className="rounded-md border border-border px-2.5 py-1 text-xs hover:bg-muted">
+          Retry
+        </button>
+      )}
+    </div>
+  );
+}

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from datetime import date, datetime
-from typing import Optional
+from datetime import date, datetime, timezone
+from typing import Literal, Optional
 
 from argon2 import PasswordHasher
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from ulid import ULID
 
 _DEFAULT_USERNAME = "admin"
@@ -33,6 +33,9 @@ class SettingsDoc(BaseModel):
     live_sync: bool = True
     theme: str = "light"
     public_api_key_enc: Optional[str] = None
+    # Interactive Brokers Flex Web Service (report-only access; cannot trade)
+    ibkr_flex_token_enc: Optional[str] = None
+    ibkr_flex_query_id: Optional[str] = None
 
 
 class LedgerEntry(BaseModel):
@@ -70,7 +73,55 @@ class ManualHolding(BaseModel):
     id: str = Field(default_factory=new_id)
     symbol: str
     qty: float
-    cost_basis: float
+    cost_basis: float  # TOTAL value paid for the position (not per share)
+    current_value: Optional[float] = None
+    account: Literal["manual", "ibkr", "other"] = "manual"
+    broker: Optional[str] = None
+
+
+def _check_date(v: Optional[str]) -> Optional[str]:
+    if v in (None, ""):
+        return None
+    date.fromisoformat(v)  # raises ValueError -> 422
+    return v
+
+
+class RealEstate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(default_factory=new_id)
+    name: str = Field(min_length=1)
+    address: Optional[str] = None
+    current_value: float = Field(ge=0)
+    purchase_price: Optional[float] = Field(default=None, ge=0)
+    notes: Optional[str] = None
+
+
+class Business(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(default_factory=new_id)
+    name: str = Field(min_length=1)
+    valuation: float = Field(ge=0)
+    ownership_pct: float = Field(default=100.0, ge=0, le=100)
+    notes: Optional[str] = None
+
+
+class FixedIncome(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(default_factory=new_id)
+    name: str = Field(min_length=1)
+    issuer: Optional[str] = None
+    face_value: float = Field(ge=0)
+    coupon_rate: Optional[float] = Field(default=None, ge=0)
+    maturity_date: Optional[str] = None
+    current_value: Optional[float] = Field(default=None, ge=0)
+
+    @field_validator("maturity_date")
+    @classmethod
+    def _valid_date(cls, v: Optional[str]) -> Optional[str]:
+        return _check_date(v)
 
 
 class CashAccount(BaseModel):
@@ -89,12 +140,34 @@ class PublicCache(BaseModel):
     holdings: list[dict] = Field(default_factory=list)
 
 
+class IbkrCache(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    fetched_at: Optional[str] = None
+    account_ids: list[str] = Field(default_factory=list)
+    account_value: float = 0.0
+    cash: Optional[float] = None
+    holdings: list[dict] = Field(default_factory=list)
+
+
+class PortfolioSnapshot(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    date: str
+    value: float
+
+
 class PortfolioDoc(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     manual_holdings: list[ManualHolding] = Field(default_factory=list)
     cash_accounts: list[CashAccount] = Field(default_factory=list)
+    real_estate: list[RealEstate] = Field(default_factory=list)
+    businesses: list[Business] = Field(default_factory=list)
+    fixed_income: list[FixedIncome] = Field(default_factory=list)
     public_cache: PublicCache = Field(default_factory=PublicCache)
+    ibkr_cache: IbkrCache = Field(default_factory=IbkrCache)
+    history: list[PortfolioSnapshot] = Field(default_factory=list)
 
 
 class PlanningEvent(BaseModel):
@@ -133,7 +206,7 @@ class HearthDoc(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     version: int = 1
-    updated_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")
+    updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"))
     auth: AuthDoc = Field(default_factory=AuthDoc)
     settings: SettingsDoc = Field(default_factory=SettingsDoc)
     ledger: list[LedgerEntry] = Field(default_factory=list)

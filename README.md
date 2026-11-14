@@ -20,12 +20,12 @@ Hearth Ledger has eight pages, all wired to a real backend:
 | ------------- | ---------------------------------------------------------------------------------------------- |
 | **Dashboard** | Net-worth donut (assets only), recent ledger activity, debt & income summaries at a glance.    |
 | **Ledger**    | Full transaction CRUD with date / description / category / amount. Pagination + filtering.     |
-| **Portfolio** | Public.com brokerage sync (read-only), plus manual holdings and cash accounts you enter by hand. |
+| **Portfolio** | Public.com and Interactive Brokers sync (both read-only), plus manual holdings and cash accounts you enter by hand. |
 | **Debt**      | Track loans, mortgages, credit-card balances with interest rate and minimum payment.           |
 | **Income**    | Recurring income sources with cadence (weekly / biweekly / monthly / annual).                  |
 | **Risk**      | Derived metrics — debt-to-income, emergency-fund coverage — and insurance toggles.             |
 | **Planning**  | Calendar of upcoming financial events and client-side scenario calculators.                    |
-| **Settings**  | Change password, set Public.com API key, switch light / dark theme, export PDF report.         |
+| **Settings**  | Change password, connect Public.com and IBKR (read-only), switch light / dark theme, export PDF report. |
 
 **Other v1 capabilities**
 
@@ -43,7 +43,7 @@ Hearth Ledger has eight pages, all wired to a real backend:
 - **Backend:** Python 3.11+, FastAPI, Pydantic, httpx, argon2-cffi, reportlab.
 - **Frontend:** React 19, TanStack Router + Query, Vite, Tailwind CSS, shadcn/ui, Recharts.
 - **Storage:** one JSON document at `data/hearth.json`. No database server.
-- **External integrations:** Public.com brokerage API (read-only, optional).
+- **External integrations:** Public.com brokerage API and Interactive Brokers Flex Web Service (both read-only, optional).
 
 ---
 
@@ -119,6 +119,20 @@ The client exchanges your secret for a short-lived access token (cached for 24 h
 
 ---
 
+## Interactive Brokers integration (optional)
+
+The **IBKR** section of the Portfolio page reads your positions through IBKR's **Flex Web Service**. That service only delivers reports you define in advance; it has no order or transfer endpoints, so the token you give Hearth Ledger cannot trade or move money.
+
+1. In IBKR Client Portal open **Performance & Reports → Flex Queries**.
+2. Create an **Activity Flex Query** that includes the **Open Positions** and **Cash Report** sections (XML format, period "Last Business Day"). Note the **Query ID** shown beside it.
+3. Under **Flex Web Service Configuration**, enable the service and generate a **token**. You can limit it to your IP address and choose when it expires.
+4. In Hearth Ledger → Settings → "Interactive Brokers (read-only)", paste the token and Query ID and save.
+5. On the Portfolio page, click **Sync** in the IBKR section. IBKR can take up to a minute to prepare the report.
+
+Values are shown in your IBKR account's base currency. Flex reports reflect the last completed business day, not live quotes. Tokens expire (IBKR lets you pick up to one year); when sync reports an expired token, generate a new one and save it again.
+
+---
+
 ## Data & backup
 
 Your books are a single file: `data/hearth.json`. To back up, copy that file. To migrate to a new machine, copy `data/` over.
@@ -142,6 +156,30 @@ bun run lint
 ```
 
 Project layout, API surface, and architectural decisions are documented in [`mvp_structure.md`](./mvp_structure.md). The original UI brief is in [`mpv_prompt.md`](./mpv_prompt.md).
+
+---
+
+## Desktop app (Electron)
+
+The same app can run as a desktop application: Electron starts the Python backend on a free localhost port, waits for `/api/health`, and opens it in a window. Server mode (`./run.sh`) is unchanged.
+
+```bash
+bun install                 # installs electron (postinstall is trusted in package.json)
+bun run desktop             # vite build + launch
+bun run desktop:dev         # launch without rebuilding dist/
+```
+
+Dev mode uses `.venv/bin/python -m backend` and the repo's `./data` folder. If Electron aborts with a "SUID sandbox helper" error (checkout without a root-owned `chrome-sandbox`), either run `sudo chown root node_modules/electron/dist/chrome-sandbox && sudo chmod 4755 node_modules/electron/dist/chrome-sandbox`, or launch with `bunx electron . --no-sandbox` for local development only.
+
+**Packaging** (builds for the host OS; PyInstaller cannot cross-compile):
+
+```bash
+bun run dist:desktop        # = scripts/build-desktop.sh: vite build -> PyInstaller -> electron-builder
+```
+
+Output goes to `release/` (Linux: `HearthLedger-<version>-x86_64.AppImage` and `release/linux-unpacked/`). `win`/`mac` stanzas exist in `electron-builder.yml` but are untested; build them on their own OS. Build-only Python deps live in `requirements-build.txt`.
+
+**Where data lives:** packaged app: `<userData>/data` (Linux `~/.config/Hearth Ledger/data`); dev: `./data`. The choice is stored in `desktop-config.json` in the Electron userData folder. In Settings, "choose data folder" copies `hearth.json`, `hearth.json.bak` and `config.json` into an empty folder, or offers to use the existing data if the folder already has a `hearth.json` (existing files are never overwritten), then restarts the backend. `HEARTH_DIST_DIR` overrides where the backend finds the built SPA.
 
 ---
 

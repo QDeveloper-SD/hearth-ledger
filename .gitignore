@@ -40,3 +40,8 @@ __pycache__/
 *.sln
 *.sw?
 .claude/
+
+# Desktop packaging
+release/
+build/
+*.spec.bak

@@ -1,0 +1,29 @@
+appId: com.hearth.ledger
+productName: Hearth Ledger
+directories:
+  output: release
+  buildResources: build-resources
+files:
+  - electron/**
+  - package.json
+  - "!node_modules"
+extraResources:
+  - from: build/pyinstaller/hearth-backend
+    to: hearth-backend
+  - from: dist
+    to: dist
+asar: true
+linux:
+  target: [deb, AppImage]
+  maintainer: Hearth Ledger
+  synopsis: Local-first family accounting
+  category: Office
+  executableName: hearth-ledger
+  artifactName: HearthLedger-${version}-${arch}.${ext}
+win:
+  target: [nsis]
+  artifactName: HearthLedger-${version}-Setup.${ext}
+mac:
+  target: [dmg]
+  category: public.app-category.finance
+  artifactName: HearthLedger-${version}-${arch}.${ext}

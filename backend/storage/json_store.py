@@ -22,6 +22,11 @@ class JsonStore:
         self._lock_path = data_dir / "hearth.json.lock"
         self._lock = FileLock(str(self._lock_path))
 
+    @property
+    def data_dir(self) -> Path:
+        """Absolute directory this store reads from / writes to."""
+        return self._data_dir.resolve()
+
     def _ensure_dir(self) -> None:
         self._data_dir.mkdir(parents=True, exist_ok=True)
 

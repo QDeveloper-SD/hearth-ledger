@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { BarChart3, PieChart as PieIcon, Plus, Pencil, Minus } from "lucide-react";
+import { BarChart3, PieChart as PieIcon, Plus, Pencil, Minus, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ImportDialog } from "@/components/finance/ImportDialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { PageHeader, Panel, CHART_COLORS } from "@/components/finance/primitives";
+import { PageHeader, Panel, CHART_COLORS, ErrorState } from "@/components/finance/primitives";
 import { Skeleton } from "@/components/ui/skeleton";
 import { listIncome, createIncome, updateIncome, deleteIncome, type IncomeSource } from "@/lib/api";
 import {
@@ -33,10 +34,11 @@ export default function Income() {
   const [view, setView] = useState<"bar" | "pie">("bar");
   const [selected, setSelected] = useState<IncomeSource | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [form, setForm] = useState<FormState>(empty);
 
-  const { data: sources, isLoading, error } = useQuery({ queryKey: ["income"], queryFn: listIncome });
+  const { data: sources, isLoading, error, refetch } = useQuery({ queryKey: ["income"], queryFn: listIncome });
 
   const add = useMutation({
     mutationFn: createIncome,
@@ -69,10 +71,11 @@ export default function Income() {
         <Button onClick={() => { setForm(empty); setAddOpen(true); }}><Plus className="h-4 w-4" /> Add</Button>
         <Button variant="outline" disabled={!selected} onClick={openEdit}><Pencil className="h-4 w-4" /> Edit</Button>
         <Button variant="outline" disabled={!selected} onClick={() => selected && remove.mutate(selected.id)}><Minus className="h-4 w-4" /> Remove</Button>
+        <Button variant="outline" onClick={() => setImportOpen(true)}><Upload className="h-4 w-4" /> Import</Button>
       </div>
 
       {isLoading && <Skeleton className="h-64 w-full" />}
-      {error && <p className="text-sm text-loss">Failed to load income sources.</p>}
+      {error && <ErrorState error={error} onRetry={() => refetch()} label="Failed to load income sources." />}
 
       {sources && sources.length === 0 && (
         <Panel title="Income Breakdown">
@@ -153,6 +156,7 @@ export default function Income() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <ImportDialog kind="income" open={importOpen} onOpenChange={setImportOpen} />
     </div>
   );
 }

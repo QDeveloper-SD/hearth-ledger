@@ -1,5 +1,10 @@
 {
-  "name": "tanstack_start_ts",
+  "name": "hearth-ledger",
+  "productName": "Hearth Ledger",
+  "version": "1.1.0",
+  "description": "Hearth Ledger - local-first family accounting",
+  "author": "Hearth Ledger",
+  "main": "electron/main.cjs",
   "private": true,
   "sideEffects": false,
   "type": "module",
@@ -8,7 +13,11 @@
     "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "desktop": "vite build && electron .",
+    "desktop:dev": "electron .",
+    "desktop:nosandbox": "vite build && electron . --no-sandbox",
+    "dist:desktop": "bash scripts/build-desktop.sh"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
@@ -68,6 +77,8 @@
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^5.0.4",
+    "electron": "^45.3.1",
+    "electron-builder": "^26.18.0",
     "eslint": "^9.32.0",
     "eslint-config-prettier": "^10.1.1",
     "eslint-plugin-prettier": "^5.2.6",
@@ -78,5 +89,8 @@
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.56.1",
     "vite": "^7.3.1"
-  }
+  },
+  "trustedDependencies": [
+    "electron"
+  ]
 }

@@ -1,12 +1,13 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Calendar, Calculator, Receipt, PiggyBank, Target } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Calendar, Calculator, Receipt, PiggyBank, Target, Plus, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { PageHeader, Panel } from "@/components/finance/primitives";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { PageHeader, Panel, Money, EmptyState, ErrorState } from "@/components/finance/primitives";
 import { Skeleton } from "@/components/ui/skeleton";
-import { listPlanningEvents } from "@/lib/api";
+import { listPlanningEvents, createPlanningEvent, updatePlanningEvent, deletePlanningEvent, type PlanningEvent, type PlanningEventInput } from "@/lib/api";
 
 const tools = [
   { id: "calendar", label: "Calendar", icon: Calendar },
@@ -40,32 +41,129 @@ export default function Planning() {
   );
 }
 
-function CalendarView() {
-  const { data: events, isLoading } = useQuery({ queryKey: ["planning-events"], queryFn: listPlanningEvents });
-  const days = Array.from({ length: 35 }, (_, i) => i - 3);
+type EventForm = { title: string; date: string; amount: string; notes: string };
+const emptyEvent: EventForm = { title: "", date: "", amount: "", notes: "" };
 
-  const eventMap: Record<number, string> = {};
-  if (events) {
-    events.forEach((ev) => {
-      const day = parseInt(ev.date.split("-")[2], 10);
-      if (!isNaN(day)) eventMap[day] = ev.title;
-    });
+function isValidDate(v: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  const d = new Date(v + "T00:00:00Z");
+  return !isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
+}
+
+function EventFormFields({ value, onChange }: { value: EventForm; onChange: (v: EventForm) => void }) {
+  return (
+    <div className="space-y-3">
+      <div><Label>Title</Label><Input value={value.title} onChange={(e) => onChange({ ...value, title: e.target.value })} /></div>
+      <div><Label>Date</Label><Input type="date" value={value.date} onChange={(e) => onChange({ ...value, date: e.target.value })} /></div>
+      <div><Label>Amount ($, optional)</Label><Input type="number" step="0.01" value={value.amount} onChange={(e) => onChange({ ...value, amount: e.target.value })} /></div>
+      <div><Label>Notes (optional)</Label><Input value={value.notes} onChange={(e) => onChange({ ...value, notes: e.target.value })} /></div>
+    </div>
+  );
+}
+
+function toBody(f: EventForm): PlanningEventInput {
+  const amt = f.amount.trim() === "" ? null : parseFloat(f.amount);
+  return {
+    title: f.title.trim(),
+    date: f.date,
+    amount: amt !== null && isFinite(amt) ? amt : null,
+    notes: f.notes.trim() === "" ? null : f.notes.trim(),
+  };
+}
+
+function CalendarView() {
+  const qc = useQueryClient();
+  const { data: events, isLoading, error, refetch } = useQuery({ queryKey: ["planning-events"], queryFn: listPlanningEvents });
+  const [addOpen, setAddOpen] = useState(false);
+  const [editing, setEditing] = useState<PlanningEvent | null>(null);
+  const [form, setForm] = useState<EventForm>(emptyEvent);
+
+  const done = () => qc.invalidateQueries({ queryKey: ["planning-events"] });
+  const add = useMutation({
+    mutationFn: createPlanningEvent,
+    onSuccess: () => { done(); setAddOpen(false); setForm(emptyEvent); },
+  });
+  const edit = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: PlanningEventInput }) => updatePlanningEvent(id, body),
+    onSuccess: () => { done(); setEditing(null); },
+  });
+  const remove = useMutation({ mutationFn: deletePlanningEvent, onSuccess: done });
+
+  const valid = form.title.trim() !== "" && isValidDate(form.date);
+  const today = new Date().toISOString().slice(0, 10);
+  const sorted = [...(events ?? [])].sort((a, b) => a.date.localeCompare(b.date));
+  const upcoming = sorted.filter((e) => e.date >= today);
+  const past = sorted.filter((e) => e.date < today).reverse();
+
+  function openEdit(ev: PlanningEvent) {
+    setForm({ title: ev.title, date: ev.date, amount: ev.amount == null ? "" : String(ev.amount), notes: ev.notes ?? "" });
+    setEditing(ev);
   }
 
+  const renderRow = (ev: PlanningEvent, muted: boolean) => (
+    <li key={ev.id} className={"flex items-start gap-3 py-3 " + (muted ? "opacity-60" : "")}>
+      <div className="w-24 shrink-0 text-sm text-muted-foreground">{ev.date}</div>
+      <div className="min-w-0 flex-1">
+        <div className="text-sm font-medium truncate">{ev.title}</div>
+        {ev.notes && <div className="text-xs text-muted-foreground">{ev.notes}</div>}
+      </div>
+      {ev.amount != null && <div className="text-sm font-medium"><Money value={ev.amount} /></div>}
+      <Button variant="ghost" size="icon" aria-label={`Edit ${ev.title}`} onClick={() => openEdit(ev)}><Pencil className="h-4 w-4" /></Button>
+      <Button variant="ghost" size="icon" aria-label={`Delete ${ev.title}`} disabled={remove.isPending} onClick={() => remove.mutate(ev.id)}><Trash2 className="h-4 w-4" /></Button>
+    </li>
+  );
+
   return (
-    <div>
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <Button onClick={() => { setForm(emptyEvent); setAddOpen(true); }}><Plus className="h-4 w-4" /> Add event</Button>
+      </div>
       {isLoading && <Skeleton className="h-40 w-full" />}
-      <div className="grid grid-cols-7 gap-1 text-xs text-muted-foreground mb-2">
-        {["S","M","T","W","T","F","S"].map((d, i) => <div key={i} className="text-center py-1">{d}</div>)}
-      </div>
-      <div className="grid grid-cols-7 gap-1">
-        {days.map((d) => (
-          <div key={d} className={"aspect-square rounded-md border border-border p-1.5 text-xs " + (d < 1 || d > 31 ? "opacity-30" : "")}>
-            <div className="font-medium">{d > 0 && d <= 31 ? d : ""}</div>
-            {eventMap[d] && <div className="mt-1 text-[10px] px-1 py-0.5 rounded bg-brand-soft text-foreground truncate">{eventMap[d]}</div>}
-          </div>
-        ))}
-      </div>
+      {error && <ErrorState error={error} onRetry={() => refetch()} label="Failed to load events." />}
+      {remove.isError && <ErrorState error={remove.error} label="Failed to delete event." />}
+      {events && events.length === 0 && (
+        <EmptyState title="No events yet" hint="Add bills, deadlines or milestones you want to plan around." height={160} />
+      )}
+      {upcoming.length > 0 && (
+        <div>
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Upcoming</h3>
+          <ul className="divide-y divide-border">{upcoming.map((e) => renderRow(e, false))}</ul>
+        </div>
+      )}
+      {past.length > 0 && (
+        <div>
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Past</h3>
+          <ul className="divide-y divide-border">{past.map((e) => renderRow(e, true))}</ul>
+        </div>
+      )}
+
+      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Add Event</DialogTitle></DialogHeader>
+          <EventFormFields value={form} onChange={setForm} />
+          {add.isError && <p className="text-sm text-loss">{(add.error as Error).message}</p>}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
+            <Button disabled={!valid || add.isPending} onClick={() => add.mutate(toBody(form))}>
+              {add.isPending ? "Saving…" : "Add"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={editing !== null} onOpenChange={(o) => { if (!o) setEditing(null); }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Edit Event</DialogTitle></DialogHeader>
+          <EventFormFields value={form} onChange={setForm} />
+          {edit.isError && <p className="text-sm text-loss">{(edit.error as Error).message}</p>}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditing(null)}>Cancel</Button>
+            <Button disabled={!valid || edit.isPending} onClick={() => editing && edit.mutate({ id: editing.id, body: toBody(form) })}>
+              {edit.isPending ? "Saving…" : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

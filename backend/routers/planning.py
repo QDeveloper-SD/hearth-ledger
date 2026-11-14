@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from datetime import date as _date
+
 from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from backend.routers.deps import SessionUser, Storedep
 from backend.storage.schema import PlanningEvent
@@ -9,11 +11,56 @@ from backend.storage.schema import PlanningEvent
 router = APIRouter(prefix="/api/planning", tags=["planning"])
 
 
+def _check_date(v: str) -> str:
+    try:
+        _date.fromisoformat(v)
+    except (TypeError, ValueError):
+        raise ValueError("date must be a valid YYYY-MM-DD date")
+    if len(v) != 10:
+        raise ValueError("date must be formatted YYYY-MM-DD")
+    return v
+
+
 class EventIn(BaseModel):
     title: str
     date: str
     amount: float | None = None
     notes: str | None = None
+
+    @field_validator("date")
+    @classmethod
+    def _date_ok(cls, v: str) -> str:
+        return _check_date(v)
+
+    @field_validator("title")
+    @classmethod
+    def _title_ok(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("title is required")
+        return v
+
+
+class EventPatch(BaseModel):
+    title: str | None = None
+    date: str | None = None
+    amount: float | None = None
+    notes: str | None = None
+
+    @field_validator("date")
+    @classmethod
+    def _date_ok(cls, v: str | None) -> str | None:
+        return None if v is None else _check_date(v)
+
+    @field_validator("title")
+    @classmethod
+    def _title_ok(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        v = v.strip()
+        if not v:
+            raise ValueError("title cannot be empty")
+        return v
 
 
 @router.get("/events")
@@ -34,14 +81,19 @@ async def add_event(body: EventIn, store: Storedep, _user: SessionUser) -> dict:
 
 
 @router.patch("/events/{event_id}")
-async def edit_event(event_id: str, body: EventIn, store: Storedep, _user: SessionUser) -> dict:
+async def edit_event(event_id: str, body: EventPatch, store: Storedep, _user: SessionUser) -> dict:
+    changes = body.model_dump(exclude_unset=True)
+    # title/date are required fields: an explicit null is not a valid clear
+    for req in ("title", "date"):
+        if req in changes and changes[req] is None:
+            raise HTTPException(status_code=422, detail=f"{req} cannot be null")
     updated: dict | None = None
 
     def _apply(d: dict) -> None:
         nonlocal updated
         for ev in d["planning"]["events"]:
             if ev["id"] == event_id:
-                ev.update({k: v for k, v in body.model_dump().items() if v is not None})
+                ev.update(changes)
                 updated = ev
                 return
 
