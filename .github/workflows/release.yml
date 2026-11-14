@@ -39,9 +39,6 @@ jobs:
     defaults:
       run:
         shell: bash
-    env:
-      # Unsigned builds: do not look for signing certificates.
-      CSC_IDENTITY_AUTO_DISCOVERY: "false"
     steps:
       - uses: actions/checkout@v4
 
@@ -90,6 +87,12 @@ jobs:
 
       - name: Package the installer (electron-builder)
         run: npx electron-builder --publish never
+
+      - name: Check the macOS app signature (ad-hoc)
+        if: runner.os == 'macOS'
+        run: |
+          codesign --verify --deep --strict --verbose=2 release/mac-arm64/*.app
+          codesign -dv release/mac-arm64/*.app 2>&1 | grep -i signature
 
       - name: List installers
         run: ls -la release

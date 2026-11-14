@@ -25,5 +25,7 @@ win:
   artifactName: HearthLedger-${version}-Setup.${ext}
 mac:
   target: [dmg]
+  # Ad-hoc signature: Apple Silicon refuses to run completely unsigned apps.
+  identity: "-"
   category: public.app-category.finance
   artifactName: HearthLedger-${version}-${arch}.${ext}
