@@ -25,6 +25,7 @@ def app(tmp_path: Path):
 async def authed_client(app):
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.post("/api/auth/login", json={"username": "admin", "password": "password"})
+        # Fresh data has no login; first-run setup creates it and signs in.
+        resp = await client.post("/api/auth/setup", json={"username": "admin", "password": "password"})
         assert resp.status_code == 200
         yield client

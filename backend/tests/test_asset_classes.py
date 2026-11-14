@@ -63,7 +63,7 @@ async def test_legacy_doc_endpoints(tmp_path: Path) -> None:
     (tmp_path / "hearth.json").write_text(json.dumps(legacy))
     app = create_app(data_dir=tmp_path)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-        assert (await c.post("/api/auth/login", json={"username": "admin", "password": "password"})).status_code == 200
+        assert (await c.post("/api/auth/setup", json={"username": "admin", "password": "password"})).status_code == 200
         pf = (await c.get("/api/portfolio")).json()["data"]
         assert pf["real_estate"] == [] and pf["totals"]["manual"] == 400
         assert pf["not_configured"] is True

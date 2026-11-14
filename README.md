@@ -78,14 +78,9 @@ Then open <http://127.0.0.1:8765>.
 
 ### First login
 
-A fresh `data/hearth.json` is created on first run with default credentials:
+There is no default password. The first time you open Hearth Ledger it asks you to create the household login (a username and a password of at least 8 characters). You can change both later from the Settings page.
 
-```
-username: admin
-password: password
-```
-
-**Change these immediately** from the Settings page.
+The login is stored only in your data folder, so there is no "forgot password" link. Keep the password somewhere safe.
 
 ---
 
@@ -176,6 +171,8 @@ Dev mode uses `.venv/bin/python -m backend` and the repo's `./data` folder. If E
 ```bash
 bun run dist:desktop        # = scripts/build-desktop.sh: vite build -> PyInstaller -> electron-builder
 ```
+
+**Installers for all three systems** are built by GitHub Actions (`.github/workflows/release.yml`). Pushing a tag such as `v1.2.0` builds the Linux (`.deb`, AppImage), Windows (`.exe`) and macOS (`.dmg`, Apple Silicon) installers and attaches them to that tag's GitHub Release. The Windows and macOS installers are unsigned, so those systems show a warning the first time the app is opened.
 
 Output goes to `release/` (Linux: `HearthLedger-<version>-x86_64.AppImage` and `release/linux-unpacked/`). `win`/`mac` stanzas exist in `electron-builder.yml` but are untested; build them on their own OS. Build-only Python deps live in `requirements-build.txt`.
 

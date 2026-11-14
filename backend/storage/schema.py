@@ -3,27 +3,22 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from typing import Literal, Optional
 
-from argon2 import PasswordHasher
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from ulid import ULID
 
 _DEFAULT_USERNAME = "admin"
-_DEFAULT_PASSWORD = "password"
 
 
 def new_id() -> str:
     return str(ULID())
 
 
-def _default_password_hash() -> str:
-    return PasswordHasher().hash(_DEFAULT_PASSWORD)
-
-
 class AuthDoc(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     username: str = _DEFAULT_USERNAME
-    password_hash: Optional[str] = Field(default_factory=_default_password_hash)
+    # None until the first-run setup screen creates the household login.
+    password_hash: Optional[str] = None
 
 
 class SettingsDoc(BaseModel):

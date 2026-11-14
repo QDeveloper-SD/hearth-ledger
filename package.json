@@ -1,7 +1,7 @@
 {
   "name": "hearth-ledger",
   "productName": "Hearth Ledger",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Hearth Ledger - local-first family accounting",
   "author": "Hearth Ledger",
   "main": "electron/main.cjs",

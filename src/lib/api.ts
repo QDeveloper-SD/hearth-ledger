@@ -296,6 +296,26 @@ export const login = async (
   return { error: errorMessage(json, res) };
 };
 
+/** Public: true when no household login exists yet (fresh install). */
+export const getAuthStatus = async (): Promise<{ needs_setup: boolean }> => {
+  const res = await fetch("/api/auth/status", { credentials: "include" });
+  const json = await readJson(res);
+  if (!res.ok) throw new ApiError(res.status, errorMessage(json, res));
+  return json.data;
+};
+
+/** First run: create the household login and sign in. */
+export const setupAccount = async (username: string, password: string): Promise<{ error: string | null }> => {
+  const res = await fetch("/api/auth/setup", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
+  if (res.ok) return { error: null };
+  return { error: errorMessage(await readJson(res), res) };
+};
+
 export const logout = () =>
   fetch("/api/auth/logout", { method: "POST", credentials: "include" });
 

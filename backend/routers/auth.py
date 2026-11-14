@@ -25,6 +25,26 @@ class SetupBody(BaseModel):
     password: str
 
 
+MIN_PASSWORD_LENGTH = 8
+
+
+def _set_session(request: Request, response: Response, username: str) -> None:
+    response.set_cookie(
+        key=_COOKIE_NAME,
+        value=get_signer(request).dumps(username),
+        httponly=True,
+        samesite="lax",
+        max_age=_MAX_AGE,
+    )
+
+
+@router.get("/status")
+async def auth_status(request: Request) -> dict:
+    """Public: tells the login page whether the household login still has to be created."""
+    auth = get_store(request).read().get("auth", {})
+    return {"data": {"needs_setup": auth.get("password_hash") is None}, "error": None}
+
+
 @router.post("/login")
 async def login(body: LoginBody, request: Request, response: Response) -> dict:
     store = get_store(request)
@@ -32,23 +52,15 @@ async def login(body: LoginBody, request: Request, response: Response) -> dict:
     auth = doc.get("auth", {})
     stored_hash = auth.get("password_hash")
     if stored_hash is None:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No password set; use /api/auth/setup")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No login exists yet. Create one first.")
     if auth.get("username") != body.username:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
     try:
         _ph.verify(stored_hash, body.password)
-    except VerifyMismatchError:
+    except (VerifyMismatchError, InvalidHashError):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
-    signer = get_signer(request)
-    token = signer.dumps(body.username)
-    response.set_cookie(
-        key=_COOKIE_NAME,
-        value=token,
-        httponly=True,
-        samesite="lax",
-        max_age=_MAX_AGE,
-    )
+    _set_session(request, response, body.username)
     return {"data": {"username": body.username}, "error": None}
 
 
@@ -59,20 +71,34 @@ async def logout(response: Response) -> dict:
 
 
 @router.post("/setup")
-async def setup(body: SetupBody, request: Request) -> dict:
+async def setup(body: SetupBody, request: Request, response: Response) -> dict:
+    """First run only: create the household login, then sign in."""
     store = get_store(request)
-    doc = store.read()
-    if doc.get("auth", {}).get("password_hash") is not None:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Password already set")
-
+    username = body.username.strip()
+    if not username:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Choose a username.")
+    if len(body.password) < MIN_PASSWORD_LENGTH:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Password must be at least {MIN_PASSWORD_LENGTH} characters.",
+        )
     hashed = _ph.hash(body.password)
+    created = False
 
     def _apply(d: dict) -> None:
-        d["auth"]["username"] = body.username
+        nonlocal created
+        # Checked inside the lock so two simultaneous setups cannot both win.
+        if d.setdefault("auth", {}).get("password_hash") is not None:
+            return
+        d["auth"]["username"] = username
         d["auth"]["password_hash"] = hashed
+        created = True
 
     store.mutate(_apply)
-    return {"data": {"username": body.username}, "error": None}
+    if not created:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="A login already exists. Sign in instead.")
+    _set_session(request, response, username)
+    return {"data": {"username": username}, "error": None}
 
 
 class PasswordBody(BaseModel):
@@ -94,7 +120,7 @@ async def change_password(body: PasswordBody, request: Request, _user: SessionUs
         _ph.verify(stored_hash, body.current_password)
     except (VerifyMismatchError, InvalidHashError):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect.")
-    if len(body.new_password) < 8:
+    if len(body.new_password) < MIN_PASSWORD_LENGTH:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="New password must be at least 8 characters.",

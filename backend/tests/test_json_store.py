@@ -24,7 +24,7 @@ def test_fresh_document_has_defaults(tmp_path: Path) -> None:
     assert "ledger" in doc
     assert "auth" in doc
     assert doc["auth"]["username"] == "admin"
-    assert doc["auth"]["password_hash"] is not None and doc["auth"]["password_hash"].startswith("$argon2")
+    assert doc["auth"]["password_hash"] is None  # created by first-run setup, never a default
 
 
 def test_backup_created_on_write(tmp_path: Path) -> None:
